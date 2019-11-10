@@ -1,21 +1,41 @@
-import sys
-import torch  
 import gym
 import numpy as np
-import torch.nn as nn
-import torch.optim as optim
+import sys
+from collections import namedtuple
 import torch.nn.functional as F
 from torch.autograd import Variable
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.distributions import Categorical
 import matplotlib.pyplot as plt
+# 
 
+class ActorCritic(nn.Module):
 
+	def __init__(self,state_space,action_space,hidden_size = 128):
+		super(ActorCritic,self).__init__()
 
-def plot_mean_and_CI(mean, lb, ub, color_mean=None, color_shading=None):
-    # plot the shaded range of the confidence intervals
-    plt.fill_between(range(mean.shape[0]),ub, lb,
-                     color=color_shading, alpha=.5)
-    # plot the mean on top
-    plt.plot(mean, color_mean)
+		self.linear1 = nn.Linear(state_space,hidden_size)
+
+		self.actor_linear = nn.Linear(hidden_size,action_space)
+		self.critic_linear = nn.Linear(hidden_size,1)
+
+		self.saved_actions = []
+		self.rewards = []
+
+	def forward(self,state):
+
+		state = F.relu(self.linear1(state))
+
+		y = F.softmax(self.actor_linear(state),dim = -1)
+
+		x = self.critic_linear(state)
+
+		return x,y
+
 
 class Vannilla_Policy_Gradient(nn.Module):
 	def __init__(self,state_space,action_space,hidden_size = 256):
@@ -30,33 +50,6 @@ class Vannilla_Policy_Gradient(nn.Module):
 		x = F.softmax(self.linear2(x),dim = 1)
 
 		return x
-
-class ActorCritic(nn.Module):
-
-	def __init__(self,state_space,action_space,hidden_size = 256):
-
-		super(ActorCritic,self).__init__()
-
-		# print(state_space,action_space)
-
-		self.critic_linear1 = nn.Linear(state_space,hidden_size)
-		self.critic_linear2 = nn.Linear(hidden_size,1)
-
-		self.actor_linear1 = nn.Linear(state_space,hidden_size)
-		self.actor_linear2 = nn.Linear(hidden_size,action_space)
-
-	def forward(self,state):
-		x = F.relu(self.critic_linear1(state))
-		x = self.critic_linear2(x)
-
-		y = F.relu(self.actor_linear1(state))
-		y = F.softmax(self.actor_linear2(y),dim = 1)
-
-		return x,y
-
-
-
-
 
 class CartPole_agent:
 
@@ -144,88 +137,81 @@ class CartPole_agent:
 
 		return reward_history
 
-
-
-
 class ActorCritic_agent():
-	def __init__(self,env,learning_rate = 3e-4,gamma = 0.99):
+
+	def __init__(self,env,learning_rate = 3e-2,gamma = 0.99):
 		self.env = env
 		self.action_space = env.action_space.n
 		self.state_space = env.observation_space.shape[0]
 		self.gamma = gamma
 		self.policy = ActorCritic(self.state_space,self.action_space)
+		self.SavedAction = namedtuple('SavedAction',['log_prob','value'])
 		self.optimizer = optim.Adam(self.policy.parameters(),lr = learning_rate)
-		self.beta = 0.001
-
-
-	def update_policy(self,rewards,values,next_value,log_probs,entropy):
-		Qvals = np.zeros(len(values))
-		# Qval = next_value
-
-		for i in reversed(range(len(rewards))):
-			next_value = rewards[i] + next_value*self.gamma
-			Qvals[i] = next_value
-
-		values = torch.FloatTensor(values)
-		Qvals = torch.FloatTensor(Qvals)
-		log_probs = torch.stack(log_probs)
-
-		advantage = Qvals - values
-
-
-		Actor_loss = (-log_probs*advantage).mean()
-		Critic_loss = advantage.pow(2).mean()
-
-
-		Actor_Critic_Loss = Actor_loss + 0.5*Critic_loss - self.beta*entropy
-
-		self.optimizer.zero_grad()
-		Actor_Critic_Loss.backward()
-		self.optimizer.step()
-
 
 	def get_action(self,state):
-		state = torch.from_numpy(state).float().unsqueeze(0)
-		value,probs = self.policy.forward(Variable(state))
+		state = torch.from_numpy(state).float()
+
+		value , probs = self.policy(state)
 		action = np.random.choice(self.action_space, p = np.squeeze(probs.detach().numpy()))
 
-		return action,value,probs
+		self.policy.saved_actions.append(self.SavedAction(torch.log(probs.squeeze(0)[action]),value))
+
+		return action
+
+	def update_policy(self):
+		R = 0
+		saved_actions = self.policy.saved_actions
+		policy_losses = []
+		value_losses = []
+		returns = []
+
+		for r in self.policy.rewards[::-1]:
+			R = r+self.gamma*R
+			returns.insert(0,R)
+
+		returns = torch.tensor(returns)
+		returns = (returns - returns.mean())/(returns.std()+1e-9)
+
+		for (log_prob,value), R in zip(saved_actions,returns):
+			advantage = R - value.item()
+
+			policy_losses.append(-log_prob*advantage)
+
+			value_losses.append(F.smooth_l1_loss(value,torch.tensor([R])))
+
+		self.optimizer.zero_grad()
+
+		loss = torch.stack(policy_losses).sum() + torch.stack(value_losses).sum()
+
+		loss.backward()
+		self.optimizer.step()
+
+		del self.policy.rewards[:]
+		del self.policy.saved_actions[:]
 
 
-	def train(self, max_episode = 3000):
+	def train(self,max_episode = 3000):
 
 		reward_history = []
 
 		for episode in range(max_episode):
-
 			state = self.env.reset()
-			log_probs = []
-			rewards = []
-			values = []
+
 			episode_reward = 0
-			entropy_ = 0
 
 			done = False
 
 			while not done:
-				action,value,probs = self.get_action(state)
+				action = self.get_action(state)
+				state,reward,done,_ = self.env.step(action)
 
-				log_prob = torch.log(probs.squeeze(0)[action])
-				entropy = -torch.sum(probs.mean()*torch.log(probs))
-				new_state,reward,done,_ = self.env.step(action)
+				self.policy.rewards.append(reward)
 
-				rewards.append(reward)
-				log_probs.append(log_prob)
-				values.append(value.detach().numpy()[0])
 				episode_reward += reward
-				entropy_ += entropy
-
-				state = new_state
 
 
-			_, next_value, _ = self.get_action(state)
 
-			self.update_policy(rewards,values,next_value,log_probs,entropy_)
+			self.update_policy()
 
 			if episode%100 == 0:
 				print("\rEpisode: {}, Episode Reward: {}, Average Reward: {}".format(episode,episode_reward,np.mean(np.array(reward_history[episode-100:episode-1]))),end = "")
@@ -235,18 +221,12 @@ class ActorCritic_agent():
 
 		return reward_history
 
-
-
-
-
-
-
-
-
-
-
-
-
+def plot_mean_and_CI(mean, lb, ub, color_mean=None, color_shading=None):
+    # plot the shaded range of the confidence intervals
+    plt.fill_between(range(mean.shape[0]),ub, lb,
+                     color=color_shading, alpha=.5)
+    # plot the mean on top
+    plt.plot(mean, color_mean)
 
 
 def plotting(returns,window_size = 100):
@@ -266,38 +246,16 @@ def plotting(returns,window_size = 100):
     
     return (averaged_returns,max_returns,min_returns)
 
-	
-
 
 env = gym.make('CartPole-v0')
-learning_rate = 3e-4
-gamma = 0.99
-
-
-episodes = 3000
-
-agent = ActorCritic_agent(env)
-reward_history = agent.train(episodes)
+agent = CartPole_agent(env)
 
 window_size = 100
 
-# X = []
-# for item in agent.loss:
-# 	X.append(item.item())
+reward_history=agent.train(1000)
 
 avg,max_returns,min_returns = plotting(reward_history,window_size)
-
-# agent.var_reward = np.array(agent.var_reward)
-
-# print(np.var(reward_history))
-# print(np.var(agent.var_reward))
-
-plot_mean_and_CI(avg,min_returns,max_returns,'r','r')
-
-
-
-
-# plt.plot(X)
+# plot_mean_and_CI(avg,min_returns,max_returns,'r','r')
 # plt.show()
 
 
@@ -333,8 +291,7 @@ def test(agent,env):
 
 
 
-# test(agent,env)
+test(agent,env)
 
-# print(policy)
 
 
