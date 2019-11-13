@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 # 
 
 class ActorCritic(nn.Module):
@@ -83,12 +83,33 @@ class CartPole_agent:
 				pw = pw + 1
 			discounted_rewards.append(Gt)
 
+		# print(len(log_probs),len(discounted_rewards))
+
+		# l = len(discounted_rewards)
+		# l = int(l/2)
+
+		# R1 = discounted_rewards[:l]
+		# R2 = discounted_rewards[l:]
+
+		# l_p1 = log_probs[:l]
+		# l_p2 = log_probs[l:]
+
+		# R1 = torch.FloatTensor(R1)
+		# R2 = torch.FloatTensor(R2)
+
+		# R2 = R2 - R1.mean()
+
+		# print(R2,l_p2)
+
+		# baseline = True
+
 		discounted_rewards = torch.FloatTensor(discounted_rewards)
 
 		if baseline == True:
-			discounted_rewards = (discounted_rewards - discounted_rewards.mean()) / (discounted_rewards.std() + 1e-9) # normalize discounted rewards
+			discounted_rewards = (discounted_rewards - discounted_rewards.mean())
 
-		self.var_reward.append((discounted_rewards.sum()).item())
+		self.var_reward.append((discounted_rewards.mean()).item())
+		
 
 		policy_gradient = []
 		for log_prob, Gt in zip(log_probs, discounted_rewards):
@@ -99,6 +120,9 @@ class CartPole_agent:
 		self.loss.append(policy_gradient)
 		policy_gradient.backward()
 		self.optimizer.step()
+
+		del log_probs[:]
+		del rewards[:]
 
 	def train(self, max_episode=3000,baseline = False):
 
@@ -132,6 +156,10 @@ class CartPole_agent:
 			if episode%100 == 0:
 				print("\rEpisode: {}, Episode Reward: {}, Average Reward: {}".format(episode,episode_reward,np.mean(np.array(reward_history[episode-100:episode-1]))),end = "")
 				sys.stdout.flush()
+
+				if np.mean(np.array(reward_history[episode-100:episode-1])) >= 195:
+					print("Solved")
+					break
 
 			reward_history.append(episode_reward)
 
@@ -221,77 +249,78 @@ class ActorCritic_agent():
 
 		return reward_history
 
-def plot_mean_and_CI(mean, lb, ub, color_mean=None, color_shading=None):
-    # plot the shaded range of the confidence intervals
-    plt.fill_between(range(mean.shape[0]),ub, lb,
-                     color=color_shading, alpha=.5)
-    # plot the mean on top
-    plt.plot(mean, color_mean)
+# def plot_mean_and_CI(mean, lb, ub, color_mean=None, color_shading=None):
+#     # plot the shaded range of the confidence intervals
+#     plt.fill_between(range(mean.shape[0]),ub, lb,
+#                      color=color_shading, alpha=.5)
+#     # plot the mean on top
+#     plt.plot(mean, color_mean)
 
 
-def plotting(returns,window_size = 100):
-    averaged_returns = np.zeros(len(returns)-window_size+1)
-    max_returns = np.zeros(len(returns)-window_size+1)
-    min_returns = np.zeros(len(returns)-window_size+1)
+# def plotting(returns,window_size = 100):
+#     averaged_returns = np.zeros(len(returns)-window_size+1)
+#     max_returns = np.zeros(len(returns)-window_size+1)
+#     min_returns = np.zeros(len(returns)-window_size+1)
     
     
-    for i in range(len(averaged_returns)):
-      averaged_returns[i] = np.mean(returns[i:i+window_size])
-      max_returns[i] = np.max(returns[i:i+window_size])
-      min_returns[i] = np.min(returns[i:i+window_size])
+#     for i in range(len(averaged_returns)):
+#       averaged_returns[i] = np.mean(returns[i:i+window_size])
+#       max_returns[i] = np.max(returns[i:i+window_size])
+#       min_returns[i] = np.min(returns[i:i+window_size])
     
-#     plt.plot(averaged_returns)
+# #     plt.plot(averaged_returns)
     
-#     plot_mean_and_CI(averaged_returns,min_returns,max_returns,'g--','g')
+# #     plot_mean_and_CI(averaged_returns,min_returns,max_returns,'g--','g')
     
-    return (averaged_returns,max_returns,min_returns)
+#     return (averaged_returns,max_returns,min_returns)
 
 
-env = gym.make('CartPole-v0')
-agent = CartPole_agent(env)
+# env = gym.make('CartPole-v0')
+# agent = ActorCritic_agent(env)
 
-window_size = 100
+# window_size = 100
 
-reward_history=agent.train(1000)
+# reward_history=agent.train(2000)
 
-avg,max_returns,min_returns = plotting(reward_history,window_size)
+# avg,max_returns,min_returns = plotting(reward_history,window_size)
 # plot_mean_and_CI(avg,min_returns,max_returns,'r','r')
 # plt.show()
 
 
-def test(agent,env):
-	state = env.reset()
+# def test(agent,env,render = False):
+# 	state = env.reset()
 
-	r = 0
+# 	r = 0
 
-	done = False
+# 	done = False
 
-	for i in range(200):
-		action = agent.get_action(state)
-		new_state,reward,done,_ = env.step(action[0])
+# 	for i in range(200):
+# 		action = agent.get_action(state)
+# 		new_state,reward,done,_ = env.step(action[0])
 
-		env.render()
+# 		if render == True:
+# 			env.render()
 
-		state = new_state
+# 		state = new_state
 
-		r += reward
+# 		r += reward
 
-		if done:
-			break
+# 		if done:
+# 			break
 
-		# print(done)
+# 		# print(done)
 
-		# env.render(state)
+# 		# env.render(state)
 
-	env.close()
+# 	env.close()
 
-	print("\n"+str(r))
-
-
-
+# 	print("\n"+str(r))
 
 
-test(agent,env)
+
+
+# # for i in range(10):
+# 	# test(agent,env)
 
 
 

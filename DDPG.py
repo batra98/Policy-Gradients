@@ -148,7 +148,7 @@ class DDPG:
 
 		episode_reward = 0
 
-		rewards = []
+		reward_history = []
 
 		episode_num = 0
 		episode_timesteps = 0
@@ -165,9 +165,9 @@ class DDPG:
 
 			next_state, reward, done, _ = self.env.step(action)
 
-			done_b = float(done) if episode_timesteps < self.env._max_episode_steps else 0
+			
 
-			replay_buffer.add(state,action,next_state,reward,done_b)
+			replay_buffer.add(state,action,next_state,reward,float(done))
 
 			# rewards.append(reward)
 
@@ -183,12 +183,12 @@ class DDPG:
 			if done:
 
 				# if episode_num%10 == 0:
-				print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
+				print("\rEpisode: {}, Episode Reward: {}, Average Reward: {}".format(episode_num+1,episode_reward,np.mean(np.array(reward_history))),end = "")
 
 				state = self.env.reset()
 				done = False
 
-				rewards.append(episode_reward)
+				reward_history.append(episode_reward)
 
 
 				episode_reward = 0
