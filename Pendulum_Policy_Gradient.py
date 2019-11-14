@@ -275,7 +275,7 @@ class Pendulum_Agent:
 			G = (G - G.mean())
 
 # 
-		self.var_reward.append(G.mean().item())
+		self.var_reward.append((G.mean()).item())
 
 		loss = -(log_probs*G.detach()).mean()
 
