@@ -157,9 +157,7 @@ class CartPole_agent:
 				print("\rEpisode: {}, Episode Reward: {}, Average Reward: {}".format(episode,episode_reward,np.mean(np.array(reward_history[episode-100:episode-1]))),end = "")
 				sys.stdout.flush()
 
-				if np.mean(np.array(reward_history[episode-100:episode-1])) >= 195:
-					print("Solved")
-					break
+
 
 			reward_history.append(episode_reward)
 

@@ -141,6 +141,41 @@ reward_history = agent.train(10000)
 
 
 
+def plot_mean_and_CI(mean, lb, ub, color_mean=None, color_shading=None):
+    # plot the shaded range of the confidence intervals
+    plt.fill_between(range(mean.shape[0]),ub, lb,
+                     color=color_shading, alpha=.5)
+    # plot the mean on top
+    plt.plot(mean, color_mean)
 
+
+def plotting(returns,window_size = 100):
+    averaged_returns = np.zeros(len(returns)-window_size+1)
+    max_returns = np.zeros(len(returns)-window_size+1)
+    min_returns = np.zeros(len(returns)-window_size+1)
+    
+    
+    for i in range(len(averaged_returns)):
+      averaged_returns[i] = np.mean(returns[i:i+window_size])
+      max_returns[i] = np.max(returns[i:i+window_size])
+      min_returns[i] = np.min(returns[i:i+window_size])
+    
+#     plt.plot(averaged_returns)
+    
+#     plot_mean_and_CI(averaged_returns,min_returns,max_returns,'g--','g')
+    
+    return (averaged_returns,max_returns,min_returns)
+
+
+env = gym.make('CartPole-v0')
+agent = ActorCritic_agent(env)
+
+window_size = 100
+
+reward_history=agent.train(2000)
+
+avg,max_returns,min_returns = plotting(reward_history,window_size)
+plot_mean_and_CI(avg,min_returns,max_returns,'r','r')
+plt.show()
 
 
